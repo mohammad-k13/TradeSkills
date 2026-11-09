@@ -1,0 +1,5 @@
+# your trading data (orders, positions, journal, cache)
+trader/
+__pycache__/
+*.pyc
+*.log
