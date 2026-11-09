@@ -2,39 +2,26 @@
 name: iran-paper
 description: >-
   Paper trading (حساب آزمایشی) for the Tehran Stock Exchange: a demo account with fake money, 3.5
-  million Toman by default, that runs on REAL TSETMC prices, plus a local web dashboard to watch and
-  test it. Orders fill only when the real market trades at the user's price; a buy at the upper limit
-  waits behind the real buy queue (صف خرید); fees are charged; orders last one session; off-hours
-  orders wait for the next session; stops and targets are executed automatically on real trades,
-  gaps included. The dashboard shows account value, total and today's return, free cash, open risk,
-  an equity curve, positions with live P/L, orders, the scanner watchlist, an order ticket with
-  suggested stop, target and size, the track record (win rate, average R, profit factor, drawdown)
-  and an event feed. Every order still passes /iran-risk. In paper mode (the default) /iran-broker
-  sends approved orders here instead of EasyTrader. Use when the user says "paper trading",
-  "demo account", "حساب آزمایشی", "حساب دمو", "تمرین", "test without real money", "open the
-  dashboard", "داشبورد", "how is my demo doing", "reset my demo account", or wants to practise.
-argument-hint: "[dashboard | status | buy | sell | reset]"
+  million Toman by default, that runs on REAL TSETMC prices. Orders fill only when the real market
+  trades at the user's price; a buy at the upper limit waits behind the real buy queue (صف خرید);
+  fees are charged; orders last one session; off-hours orders wait for the next session; stops and
+  targets are executed automatically on real trades, gaps included. Reports account value, positions
+  with live P/L, open orders and the track record (win rate, average R, profit factor, drawdown).
+  Every order still passes /iran-risk. In paper mode (the default) /iran-broker sends approved
+  orders here instead of EasyTrader. Use when the user says "paper trading", "demo account",
+  "حساب آزمایشی", "حساب دمو", "تمرین", "test without real money", "how is my demo doing",
+  "reset my demo account", or wants to practise.
+argument-hint: "[status | buy | sell | reset]"
 ---
 
 # iran-paper
 
-Scripts: `python ~/.claude/skills/iran-paper/paper.py <command>` and
-`python ~/.claude/skills/iran-paper/dashboard.py`. The account lives in `E:/projects/iran-trader/trader/paper.json`.
+Script: `python ~/.claude/skills/iran-paper/paper.py <command>`. The account lives in
+`E:/projects/iran-trader/trader/paper.json`.
 
-## Dashboard
-
-Start it with `run_in_background: true`. It prints its URL and opens the browser:
-`python ~/.claude/skills/iran-paper/dashboard.py`. The URL is http://127.0.0.1:8765, reachable only
-from this PC. The user can also double-click `E:\projects\iran-trader\dashboard.cmd`.
-
-- During the session it checks the account against real trades every 30 seconds. The page refreshes
-  every 15 seconds.
-- The order ticket shows the live quote, the daily limit and queue state, and suggests a stop
-  (1.5×ATR), a target (2R after fees) and a quantity (from the user's rules). It previews cost,
-  loss at the stop, gain at the target and R:R, then runs the same risk check as `/iran-risk`. A
-  BLOCK is shown with its reasons and nothing is placed.
-- The «اسکن بازار» button runs `/iran-scanner` and fills the watchlist. «بررسی» on any row loads that
-  symbol into the ticket.
+During the session, run `status` (or `update`) every few minutes, or use `/loop 2m` with
+`paper.py update`, so orders fill and stops and targets trigger on time. If the account wasn't
+updated for some days, it catches up from TSETMC history the next time it runs.
 
 ## CLI
 

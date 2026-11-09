@@ -15,7 +15,7 @@ Python stdlib only, public data only, and nothing is ever sent to a broker witho
 | `/iran-broker` | Ticket, then the user's yes, then fills the EasyTrader (d.easytrader.ir) form in the user's Chrome, then a second yes. Also records fills and positions |
 | `/iran-alerts` | Price, stop, target, %, queue-form and queue-break, time and opening-bell alerts, plus quick quotes |
 | `/iran-signals` | Reads public Telegram signal channels, parses the signals and grades each channel against real prices |
-| `/iran-paper` | Demo account (default 3.5M Toman) on real prices, plus a local dashboard at http://127.0.0.1:8765 (`dashboard.cmd`) |
+| `/iran-paper` | Demo account (default 3.5M Toman) on real prices: fills on real trades, queues, fees, auto stop/target |
 
 **Mode:** `trader/config.json` → `"mode": "paper"` (the default) sends approved orders to the demo
 account. `"live"` uses EasyTrader through Chrome.
