@@ -111,6 +111,10 @@ DEFAULT_CONFIG = {
     ],
     # Telegram signal channels (public channels only, read via https://t.me/s/<name>)
     "signal_channels": [],
+    # paper = demo account with fake money on real prices (trader/paper.json); live = real broker
+    "mode": "paper",
+    "paper_start_cash_toman": 3_500_000,
+    "paper_auto_exits": True,             # paper: sell automatically when the stop or target trades
     # broker (browser automation through Chrome; you log in yourself)
     "broker_name": "ایزی‌تریدر (مفید)",
     "broker_url": "https://d.easytrader.ir/",
@@ -633,6 +637,45 @@ def round_tick(p: float, cfg=None, down=True) -> float:
     t = float((cfg or config()).get("tick_rial") or 1)
     import math
     return (math.floor(p / t) if down else math.ceil(p / t)) * t
+
+
+# ---------------------------------------------------------------- account (paper or live)
+def is_paper(cfg=None) -> bool:
+    return (cfg or config()).get("mode", "paper") == "paper"
+
+
+def paper_state() -> dict | None:
+    return read_json("paper.json")
+
+
+def account_cash_rial(cfg=None):
+    """Cash available for a new buy: the paper account's free cash in paper mode, else cash_toman."""
+    c = cfg or config()
+    if is_paper(c):
+        p = paper_state()
+        if p is None:
+            return c["paper_start_cash_toman"] * 10
+        reserved = sum(o["reserve_rial"] for o in p["orders"] if o["status"] == "open" and o["side"] == "buy")
+        return p["cash_rial"] - reserved
+    return c["cash_toman"] * 10 if c.get("cash_toman") else None
+
+
+def account_equity_rial(cfg=None):
+    """Size limits (position %, buffer) are taken against total equity, not just free cash."""
+    c = cfg or config()
+    if is_paper(c):
+        p = paper_state()
+        if p is None:
+            return c["paper_start_cash_toman"] * 10
+        return p.get("last_equity_rial") or p["cash_rial"]
+    return c["cash_toman"] * 10 if c.get("cash_toman") else None
+
+
+def open_positions(cfg=None) -> list[dict]:
+    c = cfg or config()
+    if is_paper(c):
+        return (paper_state() or {}).get("positions", [])
+    return (read_json("positions.json", {}) or {}).get("open", [])
 
 
 # ---------------------------------------------------------------- misc

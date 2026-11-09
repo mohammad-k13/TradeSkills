@@ -59,11 +59,16 @@ def cmd_size(a):
     plan = I.read_json("plan.json")
     if not plan:
         I.die("trader/plan.json نیست. اول /iran-exit.")
-    cash_t = a.cash if a.cash is not None else cfg.get("cash_toman")
     loss_t = a.max_loss if a.max_loss is not None else cfg.get("max_loss_per_trade_toman")
-    if not cash_t or not loss_t:
-        I.die("نقدینگی و حداکثر ضرر هر معامله را بدهید: budget.py rules --cash 50000000 --max-loss 1000000 (تومان)")
-    cash, max_loss = cash_t * 10, loss_t * 10       # -> Rial
+    if a.cash is not None:
+        equity = free = a.cash * 10
+    else:
+        equity, free = I.account_equity_rial(cfg), I.account_cash_rial(cfg)   # paper account in paper mode
+    if not equity or not loss_t:
+        I.die("نقدینگی و حداکثر ضرر هر معامله را بدهید: budget.py rules --cash 3500000 --max-loss 50000 (تومان)")
+    max_loss = loss_t * 10       # -> Rial
+    if I.is_paper(cfg) and a.cash is None:
+        print(f"(حساب آزمایشی: دارایی {I.money(equity, cfg)}، نقد آزاد {I.money(free, cfg)})")
     fb, fs = I.fees(cfg)
     q = I.quote(plan["insCode"])
     price = a.price or plan["entry"]
@@ -80,8 +85,8 @@ def cmd_size(a):
     risk = cost - stop * (1 - fs)
     limits = {
         "max_loss": math.floor(max_loss / risk),
-        "position": math.floor(cash * cfg["max_position_pct"] / 100 / cost),
-        "cash": math.floor(cash * (1 - cfg["cash_buffer_pct"] / 100) / cost),
+        "position": math.floor(equity * cfg["max_position_pct"] / 100 / cost),
+        "cash": max(0, math.floor((free - equity * cfg["cash_buffer_pct"] / 100) / cost)),
     }
     if cfg.get("max_order_toman"):
         limits["max_order"] = math.floor(cfg["max_order_toman"] * 10 / cost)

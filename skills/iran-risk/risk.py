@@ -51,12 +51,22 @@ def check(o: dict, cfg: dict) -> dict:
     st = I.market_status(cfg)
     fb, fs = I.fees(cfg)
 
+    paper = I.is_paper(cfg)
+    next_session = paper and not st["open"]       # paper: an off-hours order waits for the next session
     need(q["state_code"] == "A", f"وضعیت نماد: {q['state'] or 'مجاز'}", f"نماد قابل معامله نیست: {q['state']}")
-    need(st["open"] or st["state"] == "pre_open" and side == "sell",
-         "بازار باز است", f"بازار بسته است: {st['reason']}")
-    need(q["band_min"] <= price <= q["band_max"],
-         f"قیمت داخل دامنه مجاز ({I.price(q['band_min'])}–{I.price(q['band_max'])})",
-         f"قیمت {I.price(price)} خارج از دامنه مجاز امروز ({I.price(q['band_min'])}–{I.price(q['band_max'])}) است")
+    if next_session:
+        warns.append(f"بازار بسته است ({st['reason']}); سفارش آزمایشی برای جلسه بعد ({I.jdate(I.next_session(cfg))}) ثبت می‌شود.")
+        base = q["close"] or q["last"]
+        bp = float(cfg.get("band_pct", 0.03))
+        lo, hi = I.round_tick(base * (1 - bp), cfg, down=False), I.round_tick(base * (1 + bp), cfg)
+        need(lo <= price <= hi, f"قیمت داخل دامنه تقریبی جلسه بعد ({I.price(lo)}–{I.price(hi)})",
+             f"قیمت {I.price(price)} خارج از دامنه تقریبی جلسه بعد ({I.price(lo)}–{I.price(hi)}) است")
+    else:
+        need(st["open"] or st["state"] == "pre_open" and side == "sell",
+             "بازار باز است", f"بازار بسته است: {st['reason']}")
+        need(q["band_min"] <= price <= q["band_max"],
+             f"قیمت داخل دامنه مجاز ({I.price(q['band_min'])}–{I.price(q['band_max'])})",
+             f"قیمت {I.price(price)} خارج از دامنه مجاز امروز ({I.price(q['band_min'])}–{I.price(q['band_max'])}) است")
 
     if side == "sell":
         if q["queue"] == "sell_queue":
@@ -71,8 +81,9 @@ def check(o: dict, cfg: dict) -> dict:
         need(cfg["allow_base_market"], "بازار پایه مجاز است", "نماد در بازار پایه است (در config مجاز نیست)")
     if q["under_supervision"]:
         need(cfg["allow_under_supervision"], "", "نماد تحت احتیاط/نظارت است (در config مجاز نیست)")
-    need(st["in_entry_window"], f"داخل پنجره ورود {cfg['entry_window'][0]}–{cfg['entry_window'][1]}",
-         f"خارج از پنجره ورود ({cfg['entry_window'][0]}–{cfg['entry_window'][1]})")
+    if not next_session:
+        need(st["in_entry_window"], f"داخل پنجره ورود {cfg['entry_window'][0]}–{cfg['entry_window'][1]}",
+             f"خارج از پنجره ورود ({cfg['entry_window'][0]}–{cfg['entry_window'][1]})")
     stop, target = o.get("stop"), o.get("target")
     need(bool(stop) and stop < price, "حد ضرر زیر قیمت دارد", "حد ضرر ندارد یا بالای قیمت است")
     need(bool(target) and target > price, "هدف بالای قیمت دارد", "هدف ندارد یا زیر قیمت است")
@@ -93,6 +104,15 @@ def check(o: dict, cfg: dict) -> dict:
          f"R:R {rr:.2f} کمتر از حداقل {cfg['min_reward_risk']} است")
 
     j, day = journal_today()
+    if paper:   # paper orders count toward the same daily limits (placed today)
+        pst = I.paper_state() or {"orders": []}
+        sess = int((I.now_tehran().date() if st["open"] else I.next_session(cfg)).strftime("%Y%m%d"))
+        mine = [x for x in pst["orders"] if x["valid_date"] == sess and x["status"] != "cancelled"]
+        day = {"orders": mine, "entries": sum(1 for x in mine if x["side"] == "buy"),
+               "risk_rial": sum(x["qty"] * (x["price"] * (1 + fb) - (x.get("stop") or x["price"]) * (1 - fs))
+                                for x in mine if x["side"] == "buy"),
+               }
+        day["orders"] = [{"id": x.get("ref_order")} for x in mine]
     if cfg.get("max_daily_loss_toman"):
         lim = cfg["max_daily_loss_toman"] * 10
         used = day["risk_rial"]
@@ -105,13 +125,16 @@ def check(o: dict, cfg: dict) -> dict:
     need(o.get("id") not in [x.get("id") for x in day["orders"]], "سفارش تکراری نیست", "همین سفارش امروز قبلاً ارسال شده")
 
     value = qty * price * (1 + fb)
-    if cfg.get("cash_toman"):
-        cash = cfg["cash_toman"] * 10
-        need(value <= cash * cfg["max_position_pct"] / 100 * 1.0001,
-             f"ارزش {I.money(value, cfg)} ≤ {cfg['max_position_pct']}% نقدینگی",
-             f"ارزش سفارش {I.money(value, cfg)} بیشتر از {cfg['max_position_pct']}% نقدینگی است")
-        need(value <= cash * (1 - cfg["cash_buffer_pct"] / 100), "ذخیره نقد حفظ می‌شود",
-             f"ذخیره نقد {cfg['cash_buffer_pct']}% شکسته می‌شود")
+    equity, free = I.account_equity_rial(cfg), I.account_cash_rial(cfg)
+    if equity:
+        held = sum(p_["qty"] * (p_.get("last") or p_["avg_price"]) for p_ in I.open_positions(cfg)
+                   if p_.get("insCode") == o["insCode"])
+        need(value + held <= equity * cfg["max_position_pct"] / 100 * 1.0001,
+             f"ارزش {I.money(value + held, cfg)} ≤ {cfg['max_position_pct']}% دارایی",
+             f"ارزش این سهم با سفارش {I.money(value + held, cfg)} بیشتر از {cfg['max_position_pct']}% دارایی است")
+        need(free - value >= equity * cfg["cash_buffer_pct"] / 100,
+             f"ذخیره نقد {cfg['cash_buffer_pct']}% حفظ می‌شود",
+             f"نقد آزاد {I.money(free, cfg)} کافی نیست یا ذخیره {cfg['cash_buffer_pct']}% شکسته می‌شود")
     if cfg.get("max_order_toman"):
         need(value <= cfg["max_order_toman"] * 10, "زیر سقف هر سفارش", "بیشتر از سقف هر سفارش")
 
