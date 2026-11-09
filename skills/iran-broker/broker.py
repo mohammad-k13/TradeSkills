@@ -61,7 +61,10 @@ def cmd_ticket(a):
     require_pass(o)
     side = "خرید" if o["side"] == "buy" else "فروش"
     print("┌──────────── بلیت سفارش ────────────")
-    print(f"│ کارگزاری:  {cfg.get('broker_name')}  {cfg.get('broker_url')}")
+    if I.is_paper(cfg):
+        print("│ 🧪 حالت آزمایشی (پول مجازی، قیمت واقعی) — به کارگزاری نمی‌رود")
+    else:
+        print(f"│ کارگزاری:  {cfg.get('broker_name')}  {cfg.get('broker_url')}")
     print(f"│ نماد:      {o['symbol']}")
     print(f"│ سمت:       {side}")
     print(f"│ تعداد:     {o['qty']:,} سهم")
@@ -99,6 +102,21 @@ def cmd_sent(a):
     require_pass(o)
     if not o.get("approved"):
         I.die("تایید کاربر ثبت نشده (broker.py confirm --said ...).")
+    if I.is_paper(cfg):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "iran-paper"))
+        import paper as P  # noqa: E402
+        r = P.place(o, source="broker")
+        o["status"] = "sent_paper"
+        o["paper_id"] = r["id"]
+        ords.setdefault("sent", []).append(o)
+        ords["pending"] = None
+        I.write_json("orders.json", ords)
+        log("sent_paper", o, paper_id=r["id"])
+        print(f"🧪 حالت آزمایشی: سفارش #{r['id']} در حساب آزمایشی ثبت شد (به کارگزاری نرفت)."
+              + (f" پشت صف {r['queue_ahead']:,.0f} سهم." if r["queue_ahead"] else "")
+              + (" برای جلسه بعد." if r["after_time"] == 0 else "")
+              + " پر شدن با معاملات واقعی TSETMC بررسی می‌شود (paper.py status یا داشبورد).")
+        return
     j = I.read_json("journal.json", {}) or {}
     day = j.setdefault("days", {}).setdefault(I.today_key(), {"orders": [], "risk_rial": 0, "entries": 0})
     rec = {k: o.get(k) for k in ("id", "symbol", "insCode", "side", "qty", "price", "stop", "target")}
@@ -168,7 +186,7 @@ def cmd_fill(a):
 
 def cmd_close(a):
     cfg = I.config()
-    pos = (I.read_json("positions.json", {}) or {}).get("open", [])
+    pos = I.open_positions(cfg)
     info = I.resolve(a.symbol)
     p = next((p for p in pos if I.norm(p["symbol"]) == I.norm(info["symbol"])), None)
     qty = a.qty or (p["qty"] if p else None)
@@ -188,6 +206,11 @@ def cmd_close(a):
 
 def cmd_positions(a):
     cfg = I.config()
+    if I.is_paper(cfg):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "iran-paper"))
+        import paper as P  # noqa: E402
+        P.cmd_status(a)
+        return
     pos = (I.read_json("positions.json", {}) or {}).get("open", [])
     if not pos:
         print("موقعیت بازی ثبت نشده.")

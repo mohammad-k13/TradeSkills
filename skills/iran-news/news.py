@@ -136,7 +136,7 @@ def targets(a, cfg):
     if a.symbols:
         return [I.resolve(s) for s in a.symbols]
     w = I.read_json("watchlist.json", {}) or {}
-    pos = (I.read_json("positions.json", {}) or {}).get("open", [])
+    pos = I.open_positions(cfg)
     syms = list(dict.fromkeys(list(w.get("manual", [])) + [p["symbol"] for p in pos] +
                               [r["symbol"] for r in (w.get("symbols") or [])[: a.top]]))
     if not syms:

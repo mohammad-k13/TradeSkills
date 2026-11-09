@@ -91,7 +91,7 @@ def cmd_from(a, source):
             I.die("plan.json نیست.")
         rows = [p]
     else:
-        rows = (I.read_json("positions.json", {}) or {}).get("open", [])
+        rows = I.open_positions()
     for p in rows:
         for k in ("stop", "target"):
             if p.get(k) and not any(x["kind"] == k and x.get("symbol") == p["symbol"] and not x["rung"] for x in st["alerts"]):

@@ -17,6 +17,18 @@ argument-hint: "[ticket | close SYMBOL | positions]"
 
 Script: `python ~/.claude/skills/iran-broker/broker.py <command>` (data in `E:/projects/iran-trader/trader/`).
 
+## Paper or live?
+
+Check `"mode"` in `E:/projects/iran-trader/trader/config.json` (the default is `paper`).
+
+- **paper:** the ticket says 🧪. After the user's yes, run `broker.py confirm`, then
+  `broker.py sent`. The order goes into the demo account (`/iran-paper`). **Don't open Chrome or
+  EasyTrader.** Fills come from real TSETMC trades automatically. There's no `fill` step.
+  `broker.py positions` shows the paper account.
+- **live:** the full flow below. Switch to live only when the user explicitly asks to trade real
+  money. Confirm it once in plain words («از این به بعد سفارش‌ها واقعی و با پول شما در ایزی‌تریدر
+  ثبت می‌شوند؛ مطمئنید؟»), then set `"mode": "live"`.
+
 ## The only path an order can take
 
 ```
